@@ -167,7 +167,7 @@ vpn() { local server="$1" user="$2" pass="$3" port="${4:-1194}" i \
     [[ "${AUTH:-""}" ]] && echo "auth $AUTH" >>$conf
     echo "tls-client" >>$conf
     echo "remote-cert-tls server" >>$conf
-    echo "auth-user-pass $auth" >>$conf
+    #echo "auth-user-pass $auth" >>$conf
     echo "comp-lzo" >>$conf
     echo "verb 1" >>$conf
     echo "reneg-sec 0" >>$conf
@@ -236,6 +236,21 @@ Options (fields in '[]' are optional, '<>' are required):
                 <password> to authenticate with
                 optional arg: [port] to use, instead of default
 
+    -C '<path to config file>' relative to the /vpn mounted directory. 
+                required arg: the path relative to the /vpn mounted directory. 
+                For example: 
+		Host file path: /home/user/vpnConf/provider/conf.ovpn
+		Mount config: -v /home/user/vpnConf:/vpn
+		Expected parameter: provider/conf.ovpn
+
+    -A '<path to auth file>' relative to the /vpn mounted directory.
+                required arg: the path relative to the /vpn mounted directory.
+                For example:
+                Host file path: /home/user/vpnConf/auths/authfile.auth
+                Mount config: -v /home/user/vpnConf:/vpn
+                Expected parameter: auths/authfile.auth
+
+
 The 'command' (if provided and valid) will be run instead of openvpn
 " >&2
     exit $RC
@@ -264,7 +279,7 @@ while read i; do
     vpnportforward "$i"
 done < <(env | awk '/^VPNPORT[0-9=_]/ {sub (/^[^=]*=/, "", $0); print}')
 
-while getopts ":hc:df:m:p:R:r:v:" opt; do
+while getopts ":hc:df:m:p:R:r:v:C:A:" opt; do
     case "$opt" in
         h) usage ;;
         c) cert_auth "$OPTARG" ;;
@@ -275,6 +290,8 @@ while getopts ":hc:df:m:p:R:r:v:" opt; do
         R) return_route6 "$OPTARG" ;;
         r) return_route "$OPTARG" ;;
         v) eval vpn $(sed 's/^/"/; s/$/"/; s/;/" "/g' <<< $OPTARG) ;;
+	C) conf="$dir/$OPTARG" ;;
+	A) auth="$dir/$OPTARG" ;;
         "?") echo "Unknown option: -$OPTARG"; usage 1 ;;
         ":") echo "No argument value for option: -$OPTARG"; usage 2 ;;
     esac
@@ -291,9 +308,9 @@ elif ps -ef | egrep -v 'grep|openvpn.sh' | grep -q openvpn; then
 else
     mkdir -p /dev/net
     [[ -c /dev/net/tun ]] || mknod -m 0666 /dev/net/tun c 10 200
-    [[ -e $conf ]] || { echo "ERROR: VPN not configured!"; sleep 120; }
-    [[ -e $cert ]] || grep -Eq '^ *(<ca>|ca +)' $conf ||
+    [[ -e "$conf" ]] || { echo "ERROR: VPN not configured!"; sleep 120; }
+    [[ -e $cert ]] || grep -Eq '^ *(<ca>|ca +)' "$conf" ||
         { echo "ERROR: VPN CA cert missing!"; sleep 120; }
-    exec sg vpn -c "openvpn --cd $dir --config $conf \
+    exec sg vpn -c "openvpn --cd $dir --config \"$conf\" --auth-user-pass \"$auth\"\
                 ${MSS:+--fragment $MSS --mssfix}"
 fi
